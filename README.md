@@ -29,6 +29,34 @@ go run ./cmd
 go build -o bin/deepseek-telegram-bot ./cmd
 ```
 
+## Run with Docker Compose
+
+You only need the compose file — the image is pulled from Docker Hub
+(`dafraer/deepseekbot`):
+
+```sh
+wget https://raw.githubusercontent.com/dafraer/deepseekbot/refs/heads/main/docker-compose.yml
+```
+
+Create a `.env` file next to it with your values (see the
+[Configuration](#configuration-env) table):
+
+```sh
+TELEGRAM_BOT_TOKEN=...
+DEEPSEEK_API_KEY=...
+OWNER_ID=...
+```
+
+Then start the bot:
+
+```sh
+docker compose up -d
+```
+
+The image tag defaults to `latest`; pin a version with `TAG=v1 docker compose up -d`.
+The whitelist is stored in the `bot-data` volume, so it survives container
+restarts and upgrades.
+
 ## Commands
 
 | Command        | Who           | Description                                            |
