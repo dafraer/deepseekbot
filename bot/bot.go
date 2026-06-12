@@ -24,10 +24,7 @@ import (
 // allowed_users.txt exists. After that the file is the source of truth and
 // the owner manages it with /add and /remove. Find your ID by messaging
 // @userinfobot on Telegram.
-var allowedUserIDs = map[int64]struct{}{
-	2066065712: {},
-	977211402:  {},
-}
+var allowedUserIDs = map[int64]struct{}{}
 
 // availableModels are the DeepSeek models selectable via /model.
 var availableModels = []string{
