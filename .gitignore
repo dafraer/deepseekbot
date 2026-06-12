@@ -1,0 +1,4 @@
+.env
+/bin/
+/.claude
+allowed_users.txt

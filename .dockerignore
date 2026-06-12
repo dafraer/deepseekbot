@@ -1,0 +1,23 @@
+# VCS and editor/tooling state
+.git
+.gitignore
+.claude
+
+# Secrets and runtime state — never bake these into the image
+.env
+.env.example
+allowed_users.txt
+data/
+
+# Local build artifacts
+bin/
+
+# Docker and project meta, not needed inside the build context
+.dockerignore
+Dockerfile
+docker-compose.yml
+Makefile
+README.md
+
+# Tests are not part of the binary
+**/*_test.go

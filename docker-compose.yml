@@ -1,0 +1,18 @@
+services:
+  bot:
+    # Tag is taken from TAG in the environment or .env, e.g. TAG=v1 docker compose up -d
+    image: dafraer/deepseekbot:${TAG:-latest}
+    build: .
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY is required}
+      OWNER_ID: ${OWNER_ID:?OWNER_ID is required}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+    volumes:
+      # Persists allowed_users.txt (written to the container's /data workdir)
+      - bot-data:/data
+
+volumes:
+  bot-data:
