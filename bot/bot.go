@@ -18,6 +18,8 @@ import (
 	"go.uber.org/zap"
 
 	"deepseek-telegram-bot/deepseek"
+
+	tgmd "github.com/eekstunt/telegramify-markdown-go"
 )
 
 // allowedUserIDs seeds the whitelist on the very first start, before
@@ -36,10 +38,6 @@ var availableModels = []string{
 const modelCallbackPrefix = "model:"
 
 const notAuthorizedMessage = "Sorry, you are not authorized to use this bot. Contact @dafraer to get access"
-
-// telegramMessageLimit is Telegram's maximum message length, measured in
-// UTF-16 code units (astral-plane characters such as emoji count as two).
-const telegramMessageLimit = 4096
 
 // deepseekTimeout bounds a single DeepSeek API call.
 const deepseekTimeout = 2 * time.Minute
@@ -167,16 +165,34 @@ func (b *Bot) handleChat(ctx context.Context, log *zap.SugaredLogger, chatID, us
 		b.send(ctx, chatID, "Sorry, I could not get a reply from DeepSeek. Please try again.")
 		return
 	}
-
-	chunks := splitMessage(reply, telegramMessageLimit)
+	chunks := tgmd.ConvertAndSplit(reply)
 	log.Infow("sending reply", "model", model, "length", len(reply), "chunks", len(chunks))
-	for i, chunk := range chunks {
-		if err := b.send(ctx, chatID, chunk); err != nil {
+	for i, msg := range chunks {
+		_, err := b.tg.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:   chatID,
+			Text:     msg.Text,
+			Entities: toEntities(msg.Entities),
+		})
+		if err != nil {
 			log.Errorw("reply delivery aborted", "failed_chunk", i+1, "chunks", len(chunks), "error", err)
 			b.send(ctx, chatID, "Sorry, part of the reply could not be delivered. Please try again.")
 			return
 		}
 	}
+}
+
+func toEntities(ents []tgmd.Entity) []models.MessageEntity {
+	out := make([]models.MessageEntity, len(ents))
+	for i, e := range ents {
+		out[i] = models.MessageEntity{
+			Type:     models.MessageEntityType(e.Type),
+			Offset:   e.Offset,
+			Length:   e.Length,
+			URL:      e.URL,
+			Language: e.Language,
+		}
+	}
+	return out
 }
 
 // keepTyping shows the "typing..." chat action and keeps refreshing it until
@@ -403,57 +419,4 @@ func (b *Bot) send(ctx context.Context, chatID int64, text string) error {
 		b.log.Errorw("failed to send telegram message", "chat_id", chatID, "error", err)
 	}
 	return err
-}
-
-// splitMessage breaks text into chunks of at most limit UTF-16 code units —
-// the unit Telegram's length cap is measured in — preferring to split on
-// newlines, then spaces, so chunks stay readable. Whitespace-only chunks are
-// dropped because Telegram rejects empty message text.
-func splitMessage(text string, limit int) []string {
-	runes := []rune(text)
-	var chunks []string
-
-	appendChunk := func(rs []rune) {
-		if chunk := string(rs); strings.TrimSpace(chunk) != "" {
-			chunks = append(chunks, chunk)
-		}
-	}
-
-	for len(runes) > 0 {
-		units := 0
-		fit := 0 // number of leading runes that fit within limit
-		lastNewline, lastSpace := 0, 0
-		for i, r := range runes {
-			u := 1
-			if r > 0xFFFF {
-				u = 2 // astral-plane runes encode as a UTF-16 surrogate pair
-			}
-			if units+u > limit {
-				break
-			}
-			units += u
-			fit = i + 1
-			if units > limit/2 { // only consider split points past halfway
-				switch r {
-				case '\n':
-					lastNewline = fit
-				case ' ':
-					lastSpace = fit
-				}
-			}
-		}
-		if fit == len(runes) {
-			appendChunk(runes)
-			break
-		}
-		cut := fit
-		if lastNewline > 0 {
-			cut = lastNewline
-		} else if lastSpace > 0 {
-			cut = lastSpace
-		}
-		appendChunk(runes[:cut])
-		runes = runes[cut:]
-	}
-	return chunks
 }

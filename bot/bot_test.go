@@ -3,77 +3,48 @@ package bot
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/go-telegram/bot/models"
+
+	tgmd "github.com/eekstunt/telegramify-markdown-go"
 )
 
-// utf16Units mirrors Telegram's length accounting for assertions.
-func utf16Units(s string) int {
-	n := 0
-	for _, r := range s {
-		if r > 0xFFFF {
-			n += 2
-		} else {
-			n++
+// TestToEntities checks the mapping from the markdown library's entities to
+// Telegram Bot API entities, preserving offsets, lengths, and link/code fields.
+func TestToEntities(t *testing.T) {
+	in := []tgmd.Entity{
+		{Type: tgmd.Bold, Offset: 0, Length: 5},
+		{Type: tgmd.TextLink, Offset: 6, Length: 4, URL: "https://example.com"},
+		{Type: tgmd.Pre, Offset: 11, Length: 8, Language: "go"},
+	}
+
+	out := toEntities(in)
+	if len(out) != len(in) {
+		t.Fatalf("got %d entities, want %d", len(out), len(in))
+	}
+	for i, e := range in {
+		got := out[i]
+		if got.Type != models.MessageEntityType(e.Type) {
+			t.Errorf("entity %d type = %q, want %q", i, got.Type, e.Type)
+		}
+		if got.Offset != e.Offset || got.Length != e.Length {
+			t.Errorf("entity %d offset/length = (%d,%d), want (%d,%d)",
+				i, got.Offset, got.Length, e.Offset, e.Length)
+		}
+		if got.URL != e.URL {
+			t.Errorf("entity %d URL = %q, want %q", i, got.URL, e.URL)
+		}
+		if got.Language != e.Language {
+			t.Errorf("entity %d Language = %q, want %q", i, got.Language, e.Language)
 		}
 	}
-	return n
 }
 
-func TestSplitMessageShortTextSingleChunk(t *testing.T) {
-	chunks := splitMessage("hello world", 4096)
-	if len(chunks) != 1 || chunks[0] != "hello world" {
-		t.Fatalf("got %q, want single chunk %q", chunks, "hello world")
-	}
-}
-
-func TestSplitMessageRespectsUTF16Limit(t *testing.T) {
-	for name, text := range map[string]string{
-		"ascii":   strings.Repeat("a", 10000),
-		"emoji":   strings.Repeat("😀", 5000), // 2 UTF-16 units each
-		"mixed":   strings.Repeat("a😀b ", 3000),
-		"newline": strings.Repeat(strings.Repeat("x", 80)+"\n", 200),
-	} {
-		t.Run(name, func(t *testing.T) {
-			chunks := splitMessage(text, 4096)
-			var rebuilt strings.Builder
-			for i, c := range chunks {
-				if u := utf16Units(c); u > 4096 {
-					t.Errorf("chunk %d is %d UTF-16 units, exceeds 4096", i, u)
-				}
-				if strings.TrimSpace(c) == "" {
-					t.Errorf("chunk %d is whitespace-only", i)
-				}
-				rebuilt.WriteString(c)
-			}
-			if rebuilt.String() != text {
-				t.Error("concatenated chunks do not reproduce the input")
-			}
-		})
-	}
-}
-
-func TestSplitMessagePrefersNewlineBoundary(t *testing.T) {
-	// One newline past the halfway point; the cut should land right after it.
-	text := strings.Repeat("a", 3000) + "\n" + strings.Repeat("b", 3000)
-	chunks := splitMessage(text, 4096)
-	if len(chunks) != 2 {
-		t.Fatalf("got %d chunks, want 2", len(chunks))
-	}
-	if !strings.HasSuffix(chunks[0], "\n") {
-		t.Error("first chunk does not end at the newline boundary")
-	}
-	if !strings.HasPrefix(chunks[1], "b") {
-		t.Error("second chunk does not start after the newline")
-	}
-}
-
-func TestSplitMessageDropsWhitespaceOnlyTail(t *testing.T) {
-	text := strings.Repeat("a", 4096) + "\n \n"
-	for i, c := range splitMessage(text, 4096) {
-		if strings.TrimSpace(c) == "" {
-			t.Errorf("chunk %d is whitespace-only", i)
-		}
+// TestToEntitiesEmpty makes sure an empty entity slice maps cleanly.
+func TestToEntitiesEmpty(t *testing.T) {
+	if out := toEntities(nil); len(out) != 0 {
+		t.Fatalf("got %d entities, want 0", len(out))
 	}
 }
 
